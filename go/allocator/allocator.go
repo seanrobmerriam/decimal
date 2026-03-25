@@ -50,7 +50,9 @@ func AllocateRatios(amount money.Money, ratios []int) ([]money.Money, error) {
 	}
 
 	result := make([]money.Money, len(ratios))
-	remaining := amount.Amount()
+	originalAmount := amount.Amount()
+	remaining := originalAmount
+	originalTotalRatio := totalRatio
 
 	for i, r := range ratios {
 		if i == len(ratios)-1 {
@@ -62,10 +64,9 @@ func AllocateRatios(amount money.Money, ratios []int) ([]money.Money, error) {
 				result[i] = amount.Currency().Zero()
 			}
 		} else {
-			share := (amount.Amount() * int64(r)) / int64(totalRatio)
+			share := (originalAmount * int64(r)) / int64(originalTotalRatio)
 			result[i] = amount.Currency().FromInt(share)
 			remaining -= share
-			totalRatio -= r
 		}
 	}
 
