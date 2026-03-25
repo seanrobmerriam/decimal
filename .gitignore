@@ -35,3 +35,6 @@ Thumbs.db
 # Rust
 target/
 Cargo.lock
+
+# Documentation (generated externally)
+docs/
