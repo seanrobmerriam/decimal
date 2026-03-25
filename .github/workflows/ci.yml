@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: go/go.sum
+
+      - name: Run tests with race detection
+        run: cd go && go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Run benchmarks
+        run: cd go && go test -bench=. -benchmem -benchtime=1s ./...
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: go/coverage.out
+          flags: unittests
+          name: decimal-money
+          fail_ci_if_error: false
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: go/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: go
+
+  rust:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up WASM target
+        run: rustup target add wasm32-unknown-unknown
+
+      - name: Run Rust tests
+        working-directory: rust
+        run: cargo test --verbose
+
+      - name: Build WASM
+        run: cargo build --target wasm32-unknown-unknown --release
+
+  js:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: js/package-lock.json
+
+      - name: Install dependencies
+        run: cd js && npm ci
+
+      - name: Run TypeScript tests
+        run: cd js && npm test
+
+      - name: Build JavaScript
+        run: cd js && npm run build
+
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Chrome for testing
+        uses: browser-actions/setup-chrome@latest
+        with:
+          chrome-version: stable
+
+      - name: Verify web directory exists
+        run: test -d web && echo "Web directory exists" || echo "Web directory missing"
+
+      - name: Validate HTML structure
+        run: |
+          if [ -f web/index.html ]; then
+            echo "HTML file exists"
+            grep -q "<!DOCTYPE html>" web/index.html && echo "Valid HTML5 doctype"
+          fi

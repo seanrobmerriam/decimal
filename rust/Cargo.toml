@@ -1,0 +1,22 @@
+[package]
+name = "decimal-money"
+version = "0.1.0"
+edition = "2021"
+authors = ["Decimal Money Team"]
+description = "A decimal-based money arithmetic library for financial calculations"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[profile.release]
+opt-level = "s"
+lto = true

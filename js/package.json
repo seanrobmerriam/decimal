@@ -1,0 +1,23 @@
+{
+  "name": "decimal-money-wasm",
+  "version": "0.1.0",
+  "description": "Decimal-based money arithmetic library for financial calculations",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "money",
+    "decimal",
+    "currency",
+    "financial",
+    "wasm"
+  ],
+  "author": "Decimal Money Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
