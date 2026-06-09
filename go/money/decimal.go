@@ -291,22 +291,58 @@ func (d *Decimal) Div(other *Decimal, rounding RoundingMode) (*Decimal, error) {
 		}
 	}
 
-	// Scale up the dividend to get more precision
-	extraScale := int32(10) // Add extra precision for division
-
-	// Multiply dividend by 10^extraScale before dividing
-	scaled := new(big.Int).Mul(d.value, big.NewInt(int64(math.Pow10(int(extraScale)))))
+	// Scale up dividend by divisor.scale + extraScale for precision
+	extraScale := int32(10)
+	scaling := other.scale + extraScale
+	pow10 := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(scaling)), nil)
+	scaled := new(big.Int).Mul(d.value, pow10)
 
 	// Perform division
 	quo := new(big.Int).Quo(scaled, other.value)
+	rem := new(big.Int).Rem(scaled, other.value)
 
-	// Round the result
-	rounded := rounding.round(quo.Int64(), int(extraScale), 0)
-	if rounded != quo.Int64() {
-		quo = big.NewInt(rounded)
+	// Apply rounding
+	if rem.Sign() != 0 {
+		var needsInc bool
+		absRem := new(big.Int).Abs(rem)
+		absRem.Mul(absRem, big.NewInt(2))
+		absDiv := new(big.Int).Abs(other.value)
+
+		switch rounding {
+		case RoundUp:
+			needsInc = true
+		case RoundDown:
+			needsInc = false
+		case RoundHalfUp:
+			needsInc = absRem.Cmp(absDiv) >= 0
+		case RoundHalfDown:
+			needsInc = absRem.Cmp(absDiv) > 0
+		case RoundHalfEven:
+			if absRem.Cmp(absDiv) > 0 {
+				needsInc = true
+			} else if absRem.Cmp(absDiv) == 0 && quo.Bit(0) == 1 {
+				needsInc = true
+			}
+		case RoundCeiling:
+			needsInc = quo.Sign() >= 0
+		case RoundFloor:
+			needsInc = quo.Sign() < 0
+		}
+
+		if needsInc {
+			if quo.Sign() >= 0 {
+				quo.Add(quo, big.NewInt(1))
+			} else {
+				quo.Sub(quo, big.NewInt(1))
+			}
+		}
 	}
 
-	return &Decimal{value: quo, scale: d.scale}, nil
+	// Divide back by 10^extraScale
+	scaleDiv := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(extraScale)), nil)
+	result := new(big.Int).Quo(quo, scaleDiv)
+
+	return &Decimal{value: result, scale: d.scale}, nil
 }
 
 // MulInt multiplies the decimal by an integer.
@@ -342,8 +378,7 @@ func (d *Decimal) DivInt(divisor int64, rounding RoundingMode) (*Decimal, error)
 		case RoundDown:
 			needsInc = false
 		case RoundHalfUp:
-			cmp := absRem.Cmp(absDiv)
-			needsInc = cmp >= 0
+			needsInc = absRem.Cmp(absDiv) >= 0
 		case RoundHalfDown:
 			needsInc = absRem.Cmp(absDiv) > 0
 		case RoundHalfEven:
@@ -353,13 +388,13 @@ func (d *Decimal) DivInt(divisor int64, rounding RoundingMode) (*Decimal, error)
 				needsInc = true
 			}
 		case RoundCeiling:
-			needsInc = d.value.Sign() > 0 && rem.Sign() != 0
+			needsInc = quo.Sign() >= 0
 		case RoundFloor:
-			needsInc = d.value.Sign() < 0 && rem.Sign() != 0
+			needsInc = quo.Sign() < 0
 		}
 
 		if needsInc {
-			if divisor > 0 {
+			if quo.Sign() >= 0 {
 				quo.Add(quo, big.NewInt(1))
 			} else {
 				quo.Sub(quo, big.NewInt(1))

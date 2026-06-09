@@ -264,6 +264,16 @@
                     <option value="AUD">AUD - Australian Dollar</option>
                     <option value="CNY">CNY - Chinese Yuan</option>
                     <option value="INR">INR - Indian Rupee</option>
+                    <option value="BRL">BRL - Brazilian Real</option>
+                    <option value="MXN">MXN - Mexican Peso</option>
+                    <option value="KRW">KRW - South Korean Won</option>
+                    <option value="SGD">SGD - Singapore Dollar</option>
+                    <option value="HKD">HKD - Hong Kong Dollar</option>
+                    <option value="NOK">NOK - Norwegian Krone</option>
+                    <option value="SEK">SEK - Swedish Krona</option>
+                    <option value="DKK">DKK - Danish Krone</option>
+                    <option value="NZD">NZD - New Zealand Dollar</option>
+                    <option value="ZAR">ZAR - South African Rand</option>
                 </select>
             </div>
 
@@ -314,6 +324,16 @@
             AUD: { code: "AUD", exponent: 2, name: "Australian Dollar" },
             CNY: { code: "CNY", exponent: 2, name: "Chinese Yuan" },
             INR: { code: "INR", exponent: 2, name: "Indian Rupee" },
+            BRL: { code: "BRL", exponent: 2, name: "Brazilian Real" },
+            MXN: { code: "MXN", exponent: 2, name: "Mexican Peso" },
+            KRW: { code: "KRW", exponent: 0, name: "South Korean Won" },
+            SGD: { code: "SGD", exponent: 2, name: "Singapore Dollar" },
+            HKD: { code: "HKD", exponent: 2, name: "Hong Kong Dollar" },
+            NOK: { code: "NOK", exponent: 2, name: "Norwegian Krone" },
+            SEK: { code: "SEK", exponent: 2, name: "Swedish Krona" },
+            DKK: { code: "DKK", exponent: 2, name: "Danish Krone" },
+            NZD: { code: "NZD", exponent: 2, name: "New Zealand Dollar" },
+            ZAR: { code: "ZAR", exponent: 2, name: "South African Rand" },
         };
 
         const RoundingMode = {
@@ -425,24 +445,23 @@
                             needsInc = twoRem > absDiv;
                             break;
                         case RoundingMode.HalfEven:
-                            if (twoRem > absDiv) {
-                                needsInc = true;
-                            } else if (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n) {
-                                needsInc = true;
-                            }
+                            needsInc = twoRem > absDiv || (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n);
                             break;
                         case RoundingMode.Ceiling:
-                            needsInc = this.value > 0n && rem !== 0n;
+                            needsInc = quo >= 0n;
                             break;
                         case RoundingMode.Floor:
-                            needsInc = this.value < 0n && rem !== 0n;
+                            needsInc = quo < 0n;
                             break;
                     }
 
                     if (needsInc) {
-                        quo += other.value > 0n ? 1n : -1n;
+                        quo += quo >= 0n ? 1n : -1n;
                     }
                 }
+
+                const scaleDivisor = 10n ** BigInt(extraScale);
+                quo = quo / scaleDivisor;
 
                 return new Decimal(quo, this.scale);
             }
@@ -602,24 +621,23 @@
                             needsInc = twoRem > absDiv;
                             break;
                         case RoundingMode.HalfEven:
-                            if (twoRem > absDiv) {
-                                needsInc = true;
-                            } else if (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n) {
-                                needsInc = true;
-                            }
+                            needsInc = twoRem > absDiv || (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n);
                             break;
                         case RoundingMode.Ceiling:
-                            needsInc = this.amount > 0n && rem !== 0n;
+                            needsInc = quo >= 0n;
                             break;
                         case RoundingMode.Floor:
-                            needsInc = this.amount < 0n && rem !== 0n;
+                            needsInc = quo < 0n;
                             break;
                     }
 
                     if (needsInc) {
-                        quo += divisor.getValue() > 0n ? 1n : -1n;
+                        quo += quo >= 0n ? 1n : -1n;
                     }
                 }
+
+                const scaleDivisor = 10n ** BigInt(extraScale);
+                quo = quo / scaleDivisor;
 
                 return new Money(quo, this.currency);
             }

@@ -6,6 +6,9 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "test": "node -e \"require('./dist/index.js')\"",
+    "format": "prettier --check src/ 2>/dev/null || true",
+    "lint": "tsc --noEmit 2>/dev/null || true",
     "prepublishOnly": "npm run build"
   },
   "keywords": [

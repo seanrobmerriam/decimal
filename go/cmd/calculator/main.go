@@ -159,7 +159,8 @@ func setCurrency(code string) {
 		parsed, err := money.ParseCurrency(code)
 		if err != nil {
 			fmt.Printf("Unknown currency: %s\n", code)
-			fmt.Println("Available: USD, EUR, GBP, JPY, CHF, CAD, AUD, CNY, INR, BRL")
+			currencies := money.RegisteredCurrencies()
+			fmt.Printf("Available: %s\n", strings.Join(currencies, ", "))
 			return
 		}
 		newCurrency = parsed

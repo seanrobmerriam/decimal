@@ -376,19 +376,17 @@ func (m Money) Div(divisor *Decimal, rounding RoundingMode) (Money, error) {
 		}
 	}
 
-	// Scale up the dividend to get more precision
-	extraScale := int32(4) // Add precision for division
-
-	// Multiply dividend by 10^extraScale before dividing
-	scaled := new(big.Int).Mul(big.NewInt(m.amount), big.NewInt(int64(math.Pow10(int(extraScale)))))
+	// Align scales: multiply amount by 10^divisor.scale
+	pow10 := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(divisor.scale)), nil)
+	scaled := new(big.Int).Mul(big.NewInt(m.amount), pow10)
 
 	// Perform division
 	quo := new(big.Int).Quo(scaled, divisor.value)
 	rem := new(big.Int).Rem(scaled, divisor.value)
 
 	// Apply rounding based on remainder
-	needsInc := false
 	if rem.Sign() != 0 {
+		var needsInc bool
 		absRem := new(big.Int).Abs(rem)
 		absRem.Mul(absRem, big.NewInt(2))
 		absDiv := new(big.Int).Abs(divisor.value)
@@ -409,27 +407,22 @@ func (m Money) Div(divisor *Decimal, rounding RoundingMode) (Money, error) {
 				needsInc = true
 			}
 		case RoundCeiling:
-			needsInc = m.amount > 0 && rem.Sign() != 0
+			needsInc = quo.Sign() >= 0
 		case RoundFloor:
-			needsInc = m.amount < 0 && rem.Sign() != 0
+			needsInc = quo.Sign() < 0
+		}
+
+		if needsInc {
+			if quo.Sign() >= 0 {
+				quo.Add(quo, big.NewInt(1))
+			} else {
+				quo.Sub(quo, big.NewInt(1))
+			}
 		}
 	}
-
-	if needsInc {
-		if divisor.value.Sign() >= 0 {
-			quo.Add(quo, big.NewInt(1))
-		} else {
-			quo.Sub(quo, big.NewInt(1))
-		}
-	}
-
-	// Now divide by 10^extraScale to get back to original scale
-	result := quo
-	scaleDivisor := big.NewInt(int64(math.Pow10(int(extraScale))))
-	result.Quo(result, scaleDivisor)
 
 	return Money{
-		amount:   result.Int64(),
+		amount:   quo.Int64(),
 		currency: m.currency,
 	}, nil
 }
@@ -450,14 +443,18 @@ func (m Money) DivInt(divisor int64, rounding RoundingMode) (Money, error) {
 	// Apply rounding based on remainder
 	needsInc := false
 	if rem != 0 {
-		absRem := rem * 2
 		absDiv := divisor
 		if divisor < 0 {
 			absDiv = -divisor
 		}
+		absRem := rem
 		if rem < 0 {
-			absRem = -absRem
+			absRem = -rem
 		}
+
+		// Compare absRem against absDiv/2 without overflow:
+		// absRem*2 >= absDiv  ⇔  absRem >= absDiv - absRem
+		absRemOpp := absDiv - absRem // always non-negative since absRem < absDiv
 
 		switch rounding {
 		case RoundUp:
@@ -465,32 +462,20 @@ func (m Money) DivInt(divisor int64, rounding RoundingMode) (Money, error) {
 		case RoundDown:
 			needsInc = false
 		case RoundHalfUp:
-			if absRem < 0 {
-				needsInc = absRem <= -absDiv
-			} else {
-				needsInc = absRem >= absDiv
-			}
+			needsInc = absRem >= absRemOpp
 		case RoundHalfDown:
-			if absRem < 0 {
-				needsInc = absRem < -absDiv
-			} else {
-				needsInc = absRem > absDiv
-			}
+			needsInc = absRem > absRemOpp
 		case RoundHalfEven:
-			if absRem < 0 {
-				needsInc = absRem < -absDiv || (absRem == -absDiv && quo%2 != 0)
-			} else {
-				needsInc = absRem > absDiv || (absRem == absDiv && quo%2 != 0)
-			}
+			needsInc = absRem > absRemOpp || (absRem == absRemOpp && quo%2 != 0)
 		case RoundCeiling:
-			needsInc = m.amount > 0 && rem != 0
+			needsInc = quo >= 0
 		case RoundFloor:
-			needsInc = m.amount < 0 && rem != 0
+			needsInc = quo < 0
 		}
 	}
 
 	if needsInc {
-		if divisor > 0 {
+		if quo >= 0 {
 			quo++
 		} else {
 			quo--
@@ -559,8 +544,10 @@ func (m Money) Split(n int) ([]Money, error) {
 	result := make([]Money, n)
 	for i := 0; i < n; i++ {
 		amount := base
-		if int64(i) < remainder {
+		if remainder > 0 && int64(i) < remainder {
 			amount++
+		} else if remainder < 0 && int64(i) < -remainder {
+			amount--
 		}
 		result[i] = Money{
 			amount:   amount,

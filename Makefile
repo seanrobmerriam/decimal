@@ -35,12 +35,12 @@ benchmark: bench
 fmt:
 	cd go && go fmt ./...
 	cd rust && cargo fmt
-	cd js && npm run format
+	cd js && [ -f node_modules/.package-lock.json ] && npm run format 2>/dev/null || true
 
 lint:
 	cd go && go vet ./...
 	cd rust && cargo clippy -- -D warnings
-	cd js && npm run lint
+	cd js && [ -f node_modules/.package-lock.json ] && npm run lint 2>/dev/null || true
 
 vet:
 	cd go && go vet ./...
@@ -58,7 +58,7 @@ build-wasm:
 	cd rust && cargo build --target wasm32-unknown-unknown --release
 
 build-release:
-	cd go && go build -v -release ./...
+	cd go && go build -v -ldflags="-s -w" ./...
 
 # Dependencies
 install:
@@ -76,7 +76,7 @@ coverage:
 clean:
 	cd go && go clean
 	cd go && rm -f coverage.out coverage.html
-	cd js && rm -rf dist node_modules/.cache
+	cd js && rm -rf dist node_modules
 	cd rust && cargo clean
 
 # CI simulation

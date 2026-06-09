@@ -2,7 +2,8 @@ use wasm_bindgen::prelude::*;
 
 use crate::errors::Error;
 
-#[derive(Debug, Clone, PartialEq)]
+#[wasm_bindgen]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Decimal {
     value: i64,
     scale: i32,
@@ -33,9 +34,13 @@ impl Decimal {
         }
 
         let combined = format!("{}{}", int_part, frac_part);
-        let value: i64 = combined.parse().map_err(|_| Error::new_parse_error(s, "invalid number"))?;
+        let value: i128 = combined.parse().map_err(|_| Error::new_parse_error(s, "invalid number"))?;
 
         let value = if negative { -value } else { value };
+        if value > i64::MAX as i128 || value < i64::MIN as i128 {
+            return Err(Error::new_parse_error(s, "value out of range"));
+        }
+        let value = value as i64;
         let scale = frac_part.len() as i32;
 
         Ok(Decimal { value, scale })
@@ -104,38 +109,34 @@ impl Decimal {
         let quo = scaled_value / other.value;
         let rem = scaled_value % other.value;
 
-        let mut result_value = quo;
+        let mut scaled_result = quo;
         if rem != 0 {
             let abs_rem = rem.abs();
             let abs_div = other.value.abs();
-            let two_rem = abs_rem * 2;
 
             let needs_inc = match rounding {
                 crate::money::RoundingMode::Up => true,
                 crate::money::RoundingMode::Down => false,
-                crate::money::RoundingMode::HalfUp => two_rem >= abs_div,
-                crate::money::RoundingMode::HalfDown => two_rem > abs_div,
+                crate::money::RoundingMode::HalfUp => abs_rem * 2 >= abs_div,
+                crate::money::RoundingMode::HalfDown => abs_rem * 2 > abs_div,
                 crate::money::RoundingMode::HalfEven => {
-                    if two_rem > abs_div {
-                        true
-                    } else if two_rem == abs_div && quo.abs() % 2 != 0 {
-                        true
-                    } else {
-                        false
-                    }
+                    abs_rem * 2 > abs_div || (abs_rem * 2 == abs_div && quo.abs() % 2 != 0)
                 }
                 crate::money::RoundingMode::Ceiling => {
-                    self.value > 0 && rem != 0
+                    scaled_result >= 0
                 }
                 crate::money::RoundingMode::Floor => {
-                    self.value < 0 && rem != 0
+                    scaled_result < 0
                 }
             };
 
             if needs_inc {
-                result_value += if other.value > 0 { 1 } else { -1 };
+                scaled_result += if scaled_result >= 0 { 1 } else { -1 };
             }
         }
+
+        let scale_divisor = 10_i64.pow(extra_scale as u32);
+        let result_value = scaled_result / scale_divisor;
 
         Ok(Decimal {
             value: result_value,
@@ -156,7 +157,7 @@ impl Decimal {
 
     fn neg(&self) -> Decimal {
         Decimal {
-            value: -self.value,
+            value: self.value.wrapping_neg(),
             scale: self.scale,
         }
     }
@@ -175,32 +176,25 @@ impl Decimal {
         if rem != 0 {
             let abs_rem = rem.abs();
             let abs_div = divisor;
-            let two_rem = abs_rem * 2;
 
             let needs_inc = match rounding {
                 crate::money::RoundingMode::Up => true,
                 crate::money::RoundingMode::Down => false,
-                crate::money::RoundingMode::HalfUp => two_rem >= abs_div,
-                crate::money::RoundingMode::HalfDown => two_rem > abs_div,
+                crate::money::RoundingMode::HalfUp => abs_rem * 2 >= abs_div,
+                crate::money::RoundingMode::HalfDown => abs_rem * 2 > abs_div,
                 crate::money::RoundingMode::HalfEven => {
-                    if two_rem > abs_div {
-                        true
-                    } else if two_rem == abs_div && quo.abs() % 2 != 0 {
-                        true
-                    } else {
-                        false
-                    }
+                    abs_rem * 2 > abs_div || (abs_rem * 2 == abs_div && quo.abs() % 2 != 0)
                 }
                 crate::money::RoundingMode::Ceiling => {
-                    self.value > 0 && rem != 0
+                    result >= 0
                 }
                 crate::money::RoundingMode::Floor => {
-                    self.value < 0 && rem != 0
+                    result < 0
                 }
             };
 
             if needs_inc {
-                result += if self.value > 0 { 1 } else { -1 };
+                result += if result >= 0 { 1 } else { -1 };
             }
         }
 

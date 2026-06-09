@@ -223,24 +223,23 @@ export class Decimal {
           needsInc = twoRem > absDiv;
           break;
         case RoundingMode.HalfEven:
-          if (twoRem > absDiv) {
-            needsInc = true;
-          } else if (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n) {
-            needsInc = true;
-          }
+          needsInc = twoRem > absDiv || (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n);
           break;
         case RoundingMode.Ceiling:
-          needsInc = this.value > 0n && rem !== 0n;
+          needsInc = quo >= 0n;
           break;
         case RoundingMode.Floor:
-          needsInc = this.value < 0n && rem !== 0n;
+          needsInc = quo < 0n;
           break;
       }
 
       if (needsInc) {
-        quo += other.value > 0n ? 1n : -1n;
+        quo += quo >= 0n ? 1n : -1n;
       }
     }
+
+    const scaleDivisor = 10n ** BigInt(extraScale);
+    quo = quo / scaleDivisor;
 
     return new Decimal(quo, this.scale);
   }
@@ -280,22 +279,18 @@ export class Decimal {
           needsInc = twoRem > absDiv;
           break;
         case RoundingMode.HalfEven:
-          if (twoRem > absDiv) {
-            needsInc = true;
-          } else if (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n) {
-            needsInc = true;
-          }
+          needsInc = twoRem > absDiv || (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n);
           break;
         case RoundingMode.Ceiling:
-          needsInc = this.value > 0n && rem !== 0n;
+          needsInc = quo >= 0n;
           break;
         case RoundingMode.Floor:
-          needsInc = this.value < 0n && rem !== 0n;
+          needsInc = quo < 0n;
           break;
       }
 
       if (needsInc) {
-        quo += this.value > 0n ? 1n : -1n;
+        quo += quo >= 0n ? 1n : -1n;
       }
     }
 
@@ -525,24 +520,23 @@ export class Money {
           needsInc = twoRem > absDiv;
           break;
         case RoundingMode.HalfEven:
-          if (twoRem > absDiv) {
-            needsInc = true;
-          } else if (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n) {
-            needsInc = true;
-          }
+          needsInc = twoRem > absDiv || (twoRem === absDiv && (quo < 0n ? -quo : quo) % 2n !== 0n);
           break;
         case RoundingMode.Ceiling:
-          needsInc = this.amount > 0n && rem !== 0n;
+          needsInc = quo >= 0n;
           break;
         case RoundingMode.Floor:
-          needsInc = this.amount < 0n && rem !== 0n;
+          needsInc = quo < 0n;
           break;
       }
 
       if (needsInc) {
-        quo += divisor.getValue() > 0n ? 1n : -1n;
+        quo += quo >= 0n ? 1n : -1n;
       }
     }
+
+    const scaleDivisor = 10n ** BigInt(extraScale);
+    quo = quo / scaleDivisor;
 
     return new Money(quo, this.currency);
   }
@@ -561,7 +555,12 @@ export class Money {
 
     const result: Money[] = [];
     for (let i = 0; i < n; i++) {
-      const amount = base + (BigInt(i) < remainder ? 1n : 0n);
+      let amount = base;
+      if (remainder > 0n && BigInt(i) < remainder) {
+        amount += 1n;
+      } else if (remainder < 0n && BigInt(i) < -remainder) {
+        amount -= 1n;
+      }
       result.push(new Money(amount, this.currency));
     }
 

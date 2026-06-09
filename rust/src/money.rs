@@ -21,6 +21,7 @@ impl Default for RoundingMode {
     }
 }
 
+#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Currency {
     code: &'static str,
@@ -134,9 +135,13 @@ impl Money {
         }
 
         let combined = format!("{}{}", int_part, frac);
-        let value: i64 = combined.parse().map_err(|_| Error::new_parse_error(s, "invalid number"))?;
+        let value: i128 = combined.parse().map_err(|_| Error::new_parse_error(s, "invalid number"))?;
 
         let value = if negative { -value } else { value };
+        if value > i64::MAX as i128 || value < i64::MIN as i128 {
+            return Err(Error::new_parse_error(s, "value out of range"));
+        }
+        let value = value as i64;
 
         Ok(Money { amount: value, currency })
     }
@@ -210,8 +215,8 @@ impl Money {
     }
 
     pub fn mul(&self, factor: &Decimal) -> Result<Money, Error> {
-        let product = self.amount * factor.value;
-        let scale = factor.scale;
+        let product = self.amount * factor.value();
+        let scale = factor.scale();
 
         if scale > 0 {
             let divisor = 10_i64.pow(scale as u32);
@@ -243,43 +248,39 @@ impl Money {
     }
 
     pub fn div(&self, divisor: &Decimal, rounding: RoundingMode) -> Result<Money, Error> {
-        if divisor.value == 0 {
+        if divisor.value() == 0 {
             return Err(Error::new_division_by_zero());
         }
 
         let extra_scale = 4;
         let scaled = self.amount * 10_i64.pow(extra_scale);
-        let quo = scaled / divisor.value;
-        let rem = scaled % divisor.value;
+        let quo = scaled / divisor.value();
+        let rem = scaled % divisor.value();
 
-        let mut result = quo;
+        let mut scaled_result = quo;
         if rem != 0 {
             let abs_rem = rem.abs();
-            let abs_div = divisor.value.abs();
-            let two_rem = abs_rem * 2;
+            let abs_div = divisor.value().abs();
 
             let needs_inc = match rounding {
                 RoundingMode::Up => true,
                 RoundingMode::Down => false,
-                RoundingMode::HalfUp => two_rem >= abs_div,
-                RoundingMode::HalfDown => two_rem > abs_div,
+                RoundingMode::HalfUp => abs_rem * 2 >= abs_div,
+                RoundingMode::HalfDown => abs_rem * 2 > abs_div,
                 RoundingMode::HalfEven => {
-                    if two_rem > abs_div {
-                        true
-                    } else if two_rem == abs_div && quo.abs() % 2 != 0 {
-                        true
-                    } else {
-                        false
-                    }
+                    abs_rem * 2 > abs_div || (abs_rem * 2 == abs_div && quo.abs() % 2 != 0)
                 }
-                RoundingMode::Ceiling => self.amount > 0 && rem != 0,
-                RoundingMode::Floor => self.amount < 0 && rem != 0,
+                RoundingMode::Ceiling => scaled_result >= 0,
+                RoundingMode::Floor => scaled_result < 0,
             };
 
             if needs_inc {
-                result += if divisor.value > 0 { 1 } else { -1 };
+                scaled_result += if scaled_result >= 0 { 1 } else { -1 };
             }
         }
+
+        let scale_divisor = 10_i64.pow(extra_scale);
+        let result = scaled_result / scale_divisor;
 
         Ok(Money {
             amount: result,
@@ -301,7 +302,12 @@ impl Money {
 
         let mut result = Vec::with_capacity(n as usize);
         for i in 0..n {
-            let amount = base + if (i as i64) < remainder { 1 } else { 0 };
+            let mut amount = base;
+            if remainder > 0 && (i as i64) < remainder {
+                amount += 1;
+            } else if remainder < 0 && (i as i64) < -remainder {
+                amount -= 1;
+            }
             result.push(Money {
                 amount,
                 currency: self.currency,
@@ -320,7 +326,7 @@ impl Money {
         } else {
             let s = abs_amount.to_string();
             if s.len() <= exp as usize {
-                format!("0{}", s)
+                format!("{:0>width$}", s, width = exp as usize + 1)
             } else {
                 let pos = s.len() - exp as usize;
                 format!("{}.{}", &s[..pos], &s[pos..])

@@ -166,7 +166,7 @@ Note: Full benchmarks pending environment setup. See [docs/benchmark-plan.md](do
 | Language | Go | JavaScript | Go, JS, Rust/Wasm |
 | Type | Generic decimal | Generic decimal | Money type with currency |
 | Overflow protection | Via big.Float | Manual | Automatic |
-| Rounding modes | 8 modes | Multiple | 6 modes |
+| Rounding modes | 8 modes | Multiple | 7 modes |
 | Allocation | No | No | Yes |
 | Currency metadata | No | No | Yes |
 | Zero allocation | Fixed | Fixed | RoundRobin + RemainderToFirst |

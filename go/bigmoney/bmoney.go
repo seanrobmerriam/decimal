@@ -217,14 +217,51 @@ func (b *BigMoney) Div(divisor *decimalmoney.Decimal, rounding decimalmoney.Roun
 		}
 	}
 
-	// Scale up dividend
-	extraScale := int32(10)
-	scaled := new(big.Int).Mul(b.amount, new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(extraScale)), nil))
+	// Align scales: multiply amount by 10^divisor.Scale()
+	pow10 := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(divisor.Scale())), nil)
+	scaled := new(big.Int).Mul(b.amount, pow10)
 
-	result := new(big.Int).Quo(scaled, divisor.Value())
+	quo := new(big.Int).Quo(scaled, divisor.Value())
+	rem := new(big.Int).Rem(scaled, divisor.Value())
+
+	if rem.Sign() != 0 {
+		var needsInc bool
+		absRem := new(big.Int).Abs(rem)
+		absRem.Mul(absRem, big.NewInt(2))
+		absDiv := new(big.Int).Abs(divisor.Value())
+
+		switch rounding {
+		case decimalmoney.RoundUp:
+			needsInc = true
+		case decimalmoney.RoundDown:
+			needsInc = false
+		case decimalmoney.RoundHalfUp:
+			needsInc = absRem.Cmp(absDiv) >= 0
+		case decimalmoney.RoundHalfDown:
+			needsInc = absRem.Cmp(absDiv) > 0
+		case decimalmoney.RoundHalfEven:
+			if absRem.Cmp(absDiv) > 0 {
+				needsInc = true
+			} else if absRem.Cmp(absDiv) == 0 && quo.Bit(0) == 1 {
+				needsInc = true
+			}
+		case decimalmoney.RoundCeiling:
+			needsInc = quo.Sign() >= 0
+		case decimalmoney.RoundFloor:
+			needsInc = quo.Sign() < 0
+		}
+
+		if needsInc {
+			if quo.Sign() >= 0 {
+				quo.Add(quo, big.NewInt(1))
+			} else {
+				quo.Sub(quo, big.NewInt(1))
+			}
+		}
+	}
 
 	return &BigMoney{
-		amount:   result,
+		amount:   quo,
 		currency: b.currency,
 	}, nil
 }
