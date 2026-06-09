@@ -1,98 +1,23 @@
 # Decimal Money Library
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/decimal/money.svg)](https://pkg.go.dev/github.com/decimal/money)
-[![Test](https://github.com/decimal/money/actions/workflows/ci.yml/badge.svg)](https://github.com/decimal/money/actions/workflows/ci.yml)
-[![Coverage](https://codecov.io/gh/decimal/money/branch/main/graph/badge.svg)](https://codecov.io/gh/decimal/money)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A precise monetary calculation library for Go, Rust, and JavaScript. This library addresses the fundamental problem of floating-point arithmetic in financial applications by using integer-based storage with arbitrary precision decimal arithmetic.
+A precise monetary calculation library for Go, Rust, and JavaScript. Uses integer-based storage in the currency's smallest unit (e.g., cents for USD) to avoid the rounding errors inherent in floating-point arithmetic.
 
-## Problem Statement
-
-Floating-point arithmetic is fundamentally unsuitable for financial calculations due to how computers represent decimal numbers in binary.
-
-### The Classic Float Error
+## The Problem
 
 ```go
-// Go's float64 cannot represent 0.1 exactly
-package main
-
-import (
-    "fmt"
-    "math"
-)
-
-func main() {
-    result := 0.1 + 0.2
-    fmt.Printf("0.1 + 0.2 = %.20f\n", result)
-    fmt.Printf("Is it exactly 0.3? %v\n", math.Abs(result-0.3) < 1e-10)
-    
-    // A real-world example: splitting $100 three ways
-    split := 100.0 / 3.0
-    total := split * 3.0
-    fmt.Printf("100/3 * 3 = %.20f\n", total)
-    fmt.Printf("Is it exactly 100? %v\n", math.Abs(total-100.0) < 1e-10)
-}
+0.1 + 0.2 = 0.30000000000000004441  // Not exactly 0.3
+100.0 / 3.0 * 3.0 = 99.99999999999998578915  // Not exactly 100
 ```
 
-Output:
-```
-0.1 + 0.2 = 0.30000000000000004441
-Is it exactly 0.3? false
-100/3 * 3 = 99.99999999999998578915
-Is it exactly 100? false
-```
-
-### Why This Matters
-
-```go
-// A banking system calculating interest
-package main
-
-import "fmt"
-
-func main() {
-    // $10,000 at 4.5% annual interest
-    principal := 10000.0
-    rate := 0.045
-    monthlyInterest := principal * rate / 12
-    
-    fmt.Printf("Monthly interest: $%.20f\n", monthlyInterest)
-    fmt.Printf("After 12 months: $%.20f\n", monthlyInterest*12)
-    
-    // In real banking, these MUST be exact
-    // A $0.00000000000001 error × millions of accounts = real money lost
-}
-```
-
-### The Decimal Solution
-
-```go
-package main
-
-import (
-    "fmt"
-    "github.com/decimal/money/money"
-)
-
-func main() {
-    // Using this library: exact arithmetic
-    principal := money.USD.FromInt(1000000) // $10,000.00 in cents
-    rate := money.USD.FromString("0.045")
-    monthlyInterest, _ := principal.Multiply(rate, money.RoundHalfUp)
-    monthlyInterest, _ = monthlyInterest.Divide(money.USD.FromInt(12), money.RoundHalfUp)
-    
-    fmt.Printf("Monthly interest: %s\n", monthlyInterest.String())
-    // Output: Monthly interest: $37.50
-    
-    yearly := monthlyInterest.Multiply(money.USD.FromInt(12), money.RoundHalfUp)
-    fmt.Printf("After 12 months: %s\n", yearly.String())
-    // Output: After 12 months: $450.00 - EXACT!
-}
-```
+Floating-point cannot represent most decimal fractions exactly. For banking, tax, and commerce, every cent must be exact.
 
 ## Quick Start
 
+### Go
+
 ```go
 package main
 
@@ -102,75 +27,130 @@ import (
 )
 
 func main() {
-    // Create money from integer (cents) or string
     price := money.USD.FromString("29.99")
-    tax := money.USD.FromString("0.08875")
-    
-    // Multiply with precise rounding
-    taxAmount, _ := price.Multiply(tax, money.RoundHalfUp)
-    
-    fmt.Println(price.Add(taxAmount).String()) // $32.65
+    rate := money.MustDecimalFromString("0.08875")
+
+    tax, _ := price.Mul(rate)
+    total, _ := price.Add(tax)
+
+    fmt.Println(total) // USD 32.65
 }
+```
+
+### Rust
+
+```rust
+use decimal_money::prelude::*;
+
+fn main() {
+    let price = Money::from_string("USD", "29.99").unwrap();
+    let rate = Decimal::from_string("0.08875").unwrap();
+    let total = price.mul(&rate).unwrap();
+    println!("{}", total.to_string()); // USD 32.65
+}
+```
+
+### JavaScript
+
+```javascript
+const { Money, Decimal } = require('decimal-money-wasm');
+
+const price = Money.fromString("USD", "29.99");
+const rate = Decimal.fromString("0.08875");
+const total = price.mul(rate);
+console.log(total.toString()); // USD 32.65
 ```
 
 ## Features
 
-### Core Features
-- **Integer-based storage**: All amounts stored as integers in smallest currency unit (cents for USD)
-- **Arbitrary precision**: Uses `big.Float` for intermediate calculations, avoiding float overflow
-- **Currency-aware**: Built-in support for major world currencies with proper decimal places
-- **Comprehensive rounding modes**: Banker's rounding, half-up, ceiling, floor, and more
-- **Allocation algorithms**: Split amounts proportionally with configurable strategies
+- **Integer-based storage** — amounts stored as integers in the currency's smallest unit
+- **Arbitrary precision** — `math/big.Int` for intermediate calculations (Go), `bigint` (JS), `i64` (Rust)
+- **Currency-aware** — 19 pre-defined ISO 4217 currencies; arithmetic validates matching currencies
+- **7 rounding modes** — Up, Down, HalfUp, HalfDown, HalfEven (banker's), Ceiling, Floor
+- **Allocation** — `Split(n)` for equal division, `AllocateRatios(ratios)` for proportional split
+- **Multi-language** — Go (most mature), Rust (WASM target), JavaScript/TypeScript
 
-### Supported Currencies
-- USD (US Dollar) - 2 decimal places
-- EUR (Euro) - 2 decimal places
-- GBP (British Pound) - 2 decimal places
-- JPY (Japanese Yen) - 0 decimal places
-- CHF (Swiss Franc) - 2 decimal places
-- CAD (Canadian Dollar) - 2 decimal places
-- AUD (Australian Dollar) - 2 decimal places
-- CNY (Chinese Yuan) - 2 decimal places
-- INR (Indian Rupee) - 2 decimal places
-- BRL (Brazilian Real) - 2 decimal places
-- MXN (Mexican Peso) - 2 decimal places
-- And more via custom Currency definition
+## Supported Currencies
 
-### Operations
-- `Add`, `Subtract`, `Multiply`, `Divide`
-- `Abs`, `Negate`, `IsZero`, `IsPositive`, `IsNegative`
-- `Allocate` (equal parts) and `AllocateRatios` (proportional)
-- `Round` to specific precision
-- `Compare` for ordering
+| Code | Currency | Decimals |
+|------|----------|----------|
+| USD | US Dollar | 2 |
+| EUR | Euro | 2 |
+| GBP | British Pound | 2 |
+| JPY | Japanese Yen | 0 |
+| CHF | Swiss Franc | 2 |
+| CAD | Canadian Dollar | 2 |
+| AUD | Australian Dollar | 2 |
+| CNY | Chinese Yuan | 2 |
+| INR | Indian Rupee | 2 |
+| BRL | Brazilian Real | 2 |
+| MXN | Mexican Peso | 2 |
+| KRW | South Korean Won | 0 |
+| SGD | Singapore Dollar | 2 |
+| HKD | Hong Kong Dollar | 2 |
+| NOK | Norwegian Krone | 2 |
+| SEK | Swedish Krona | 2 |
+| DKK | Danish Krone | 2 |
+| NZD | New Zealand Dollar | 2 |
+| ZAR | South African Rand | 2 |
 
-### Error Handling
-- Type-safe error types (`CurrencyMismatchError`, `DivisionByZeroError`, `OverflowError`)
-- Precision loss warnings for float conversions
-- Parse error details with expected format hints
+## API
 
-## Benchmark Results
+All three language implementations share the same API shape:
 
-| Operation | shopspring/decimal | decimal/money |
-|-----------|-------------------|---------------|
-| Add |基准 | TBD |
-| Multiply | 基准 | TBD |
-| Divide | 基准 | TBD |
-| Parse | 基准 | TBD |
+| Operation | Go | Rust | JS |
+|-----------|----|------|----|
+| From string | `c.FromString(s)` | `Money::from_string(c, s)` | `Money.fromString(c, s)` |
+| From int (minor units) | `c.FromInt(n)` | `Money::from_int(c, n)` | `Money.fromInt(c, n)` |
+| Add | `a.Add(b)` | `a.add(&b)` | `a.add(b)` |
+| Subtract | `a.Sub(b)` | `a.sub(&b)` | `a.sub(b)` |
+| Multiply (by Decimal) | `a.Mul(factor)` | `a.mul(&factor)` | `a.mul(factor)` |
+| Divide (by Decimal) | `a.Div(divisor, rounding)` | `a.div(&divisor, rounding)` | `a.div(divisor, rounding)` |
+| Multiply (by int) | `a.MulInt(n)` | — | — |
+| Divide (by int) | `a.DivInt(n, rounding)` | — | — |
+| Split (equal parts) | `a.Split(n)` | `a.split(n)` | `a.split(n)` |
+| Allocate by ratios | `a.AllocateRatios(r)` | — | `a.allocateRatios(r)` |
+| Compare | `a.Cmp(b)` | — | `a.compareTo(b)` |
+| Negate | `a.Neg()` | — | — |
+| Absolute | `a.Abs()` | — | — |
+| Format | `a.Format()`, `a.String()` | `a.to_string()` | `a.format()`, `a.toString()` |
+| Is zero/positive/negative | `a.IsZero()`, etc. | `a.is_zero()`, etc. | `a.isZero()`, etc. |
 
-Note: Full benchmarks pending environment setup. See [docs/benchmark-plan.md](docs/benchmark-plan.md) for methodology.
+## Rounding Modes
+
+| Mode | Direction | 1.015 → 0.01 | 1.025 → 0.01 | -1.015 → -0.01 |
+|------|-----------|-------------|-------------|----------------|
+| **Up** | Away from zero | 1.02 | 1.03 | -1.02 |
+| **Down** | Toward zero | 1.01 | 1.02 | -1.01 |
+| **HalfUp** | ≥ 0.5 rounds up | 1.02 | 1.03 | -1.02 |
+| **HalfDown** | > 0.5 rounds up | 1.01 | 1.02 | -1.01 |
+| **HalfEven** | Ties → nearest even | 1.02 | 1.02 | -1.02 |
+| **Ceiling** | Toward +∞ | 1.02 | 1.03 | -1.01 |
+| **Floor** | Toward -∞ | 1.01 | 1.02 | -1.02 |
+
+## Error Handling
+
+The Go implementation provides typed errors for programmatic handling:
+
+- `CurrencyMismatchError` — different currencies in same operation
+- `DivisionByZeroError` — divisor is zero
+- `OverflowError` — result exceeds int64 range
+- `ParseError` — invalid string format
+- `PrecisionLossError` — float conversion loses precision
+
+Rust returns `Result<T, Error>` with `ErrorKind` variants. JS throws `Error` with descriptive messages.
 
 ## Comparison
 
-| Feature | shopspring/decimal | decimal.js | This Library |
-|---------|-------------------|------------|--------------|
-| Language | Go | JavaScript | Go, JS, Rust/Wasm |
-| Type | Generic decimal | Generic decimal | Money type with currency |
-| Overflow protection | Via big.Float | Manual | Automatic |
-| Rounding modes | 8 modes | Multiple | 7 modes |
-| Allocation | No | No | Yes |
-| Currency metadata | No | No | Yes |
-| Zero allocation | Fixed | Fixed | RoundRobin + RemainderToFirst |
-| Modular design | Single package | Single package | Separate money/bigmoney/allocator |
+| Feature | shopspring/decimal | This Library |
+|---------|-------------------|--------------|
+| Language | Go | Go, JS, Rust/Wasm |
+| Type | Generic decimal | Money type with currency |
+| Overflow protection | Via big.Float | int64 with big.Int intermediates |
+| Rounding modes | 8 modes | 7 modes |
+| Allocation | No | Yes |
+| Currency metadata | No | Yes |
+| Modular design | Single package | money / bigmoney / allocator |
 
 ## Installation
 
@@ -185,11 +165,7 @@ go get github.com/decimal/money/allocator
 ### JavaScript/TypeScript
 
 ```bash
-npm install @decimal/money
-# or
-yarn add @decimal/money
-# or
-pnpm add @decimal/money
+npm install decimal-money-wasm
 ```
 
 ### Rust
@@ -199,67 +175,54 @@ pnpm add @decimal/money
 decimal-money = { git = "https://github.com/decimal/money" }
 ```
 
+The Rust crate compiles to WASM via `wasm-bindgen` for browser use.
+
 ## Usage Examples
 
-### Go
+### Go — Allocation
 
 ```go
-package main
+total := money.USD.FromString("100.00")
+parts, _ := total.Split(3)
+// parts[0] = $33.34, parts[1] = $33.33, parts[2] = $33.33
 
-import (
-    "fmt"
-    "github.com/decimal/money/money"
-)
-
-func main() {
-    // Basic arithmetic
-    a := money.USD.FromString("10.50")
-    b := money.USD.FromString("5.25")
-    
-    sum, _ := a.Add(b)
-    diff, _ := a.Subtract(b)
-    prod, _ := a.Multiply(b, money.RoundHalfUp)
-    
-    fmt.Println(sum.String())   // $15.75
-    fmt.Println(diff.String())  // $5.25
-    fmt.Println(prod.String()) // $55.13
-    
-    // Allocation - split $100 among 3 people
-    total := money.USD.FromString("100.00")
-    parts, _ := total.AllocateRatios([]int{5, 3, 2})
-    // parts[0] = $50.00, parts[1] = $30.00, parts[2] = $20.00
-    
-    // Currency conversion
-    usd := money.USD.FromString("100.00")
-    eur, _ := usd.Convert(money.EUR, money.USD.FromString("0.85"), money.RoundHalfUp)
-    fmt.Println(eur.String()) // €85.00
-}
+ratios, _ := total.AllocateRatios([]int{5, 3, 2})
+// ratios[0] = $50.00, ratios[1] = $30.00, ratios[2] = $20.00
 ```
 
-### JavaScript/TypeScript
+### Go — Decimal arithmetic
 
-```typescript
-import { Money, USD, EUR, RoundingMode } from '@decimal/money';
+```go
+d1 := money.MustDecimalFromString("10.50")
+d2 := money.MustDecimalFromString("3.50")
+sum := d1.Add(d2)          // 14.00
+diff := d1.Sub(d2)         // 7.00
+prod := d1.Mul(d2)         // 36.7500
+quot, _ := d1.Div(d2, money.RoundHalfUp)  // 3.00
+```
 
-// Basic operations
-const price = USD.fromString('29.99');
-const tax = USD.fromString('0.08875');
-const total = price.multiply(tax, RoundingMode.HalfUp);
+### Rust
 
-console.log(total.toString()); // $32.65
+```rust
+let a = Money::from_string("USD", "100.00").unwrap();
+let b = Money::from_string("USD", "33.00").unwrap();
+let sum = a.add(&b).unwrap();
+assert_eq!(sum.amount(), 13300);
+```
 
-// Allocation
-const bill = USD.fromString('100.00');
-const [alice, bob, carol] = bill.allocateRatios([5, 3, 2]);
-console.log(alice.toString()); // $50.00
-console.log(bob.toString());   // $30.00
-console.log(carol.toString()); // $20.00
+### JavaScript
+
+```javascript
+const price = Money.fromString("USD", "29.99");
+const rate = Decimal.fromString("0.08");
+const total = price.mul(rate);
+console.log(total.toString()); // USD 2.40
 ```
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT License — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Contributions welcome! Please read our contributing guidelines before submitting PRs.
+See [CONTRIBUTING.md](CONTRIBUTING.md).
